@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Solaris Wing: Caldera Sortie</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="./styles.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./vendor/three.module.min.js"
+      }
+    }
+  </script>
+</head>
+<body>
+  <canvas id="scene-canvas" aria-label="Solaris Wing 3D flight viewport"></canvas>
+  <canvas id="hud-canvas" aria-hidden="true"></canvas>
+
+  <div id="top-bar" class="top-bar hidden">
+    <div class="top-pill mission-pill">
+      <span class="pill-tag">SORTIE</span>
+      <span id="hud-mission-name">CALDERA RING TRIAL</span>
+      <span class="pill-sep">|</span>
+      <span id="hud-objective-text">GATE 1 / 10</span>
+    </div>
+    <div class="top-pill controls-pill">
+      <span><b>W/S</b> Pitch</span>
+      <span><b>A/D</b> Roll</span>
+      <span><b>Q/E</b> Yaw</span>
+      <span><b>Shift/Ctrl</b> Throttle</span>
+      <span><b>V</b> View</span>
+      <span><b>G</b> Gear</span>
+      <span><b>F</b> Flaps</span>
+      <span><b>B</b> Brake</span>
+      <span><b>Space</b> Drop/Flare</span>
+      <span><b>P</b> Menu</span>
+    </div>
+  </div>
+
+  <div id="briefing-overlay" class="overlay">
+    <div class="panel briefing-panel">
+      <div class="brand-row">
+        <div>
+          <div class="eyebrow">S-14 KESTREL TACTICAL FLIGHT SIMULATOR</div>
+          <h1>SOLARIS WING</h1>
+          <p class="subtitle">Caldera Archipelago Sorties &mdash; 6-DOF Aerodynamics, Lit 3D Cockpit &amp; PAPI Landings</p>
+        </div>
+        <div class="atmo-picker" role="group" aria-label="Atmosphere preset">
+          <span class="picker-label">SKY</span>
+          <button type="button" class="atmo-btn active" data-atmo="golden">Golden Hour</button>
+          <button type="button" class="atmo-btn" data-atmo="noon">Alpine Noon</button>
+          <button type="button" class="atmo-btn" data-atmo="storm">Amber Storm</button>
+        </div>
+      </div>
+
+      <div class="mission-grid" id="mission-grid">
+        <button type="button" class="mission-card selected" data-mission="rings">
+          <div class="card-head">
+            <span class="card-code">MSN-01</span>
+            <span class="card-diff">PRECISION</span>
+          </div>
+          <h3>Caldera Ring Trial</h3>
+          <p>Thread 10 aerial gates through the sea arch, fjord canyon, and caldera rim before landing on Runway 09.</p>
+        </button>
+        <button type="button" class="mission-card" data-mission="supply">
+          <div class="card-head">
+            <span class="card-code">MSN-02</span>
+            <span class="card-diff">LOW-ALT</span>
+          </div>
+          <h3>Beacon Supply Drop</h3>
+          <p>Descend to 4 remote island pads, drop supply crates with Space under 160 kt, and RTB on low fuel.</p>
+        </button>
+        <button type="button" class="mission-card" data-mission="storm">
+          <div class="card-head">
+            <span class="card-code">MSN-03</span>
+            <span class="card-diff">INTERCEPT</span>
+          </div>
+          <h3>Storm Intercept</h3>
+          <p>Fight ridge turbulence and crosswinds to intercept 5 high-altitude weather beacons and recover safely.</p>
+        </button>
+        <button type="button" class="mission-card" data-mission="free">
+          <div class="card-head">
+            <span class="card-code">FREE</span>
+            <span class="card-diff">SANDBOX</span>
+          </div>
+          <h3>Free Flight</h3>
+          <p>Open archipelago exploration from Runway 09 with touch-and-go scoring, sea-arch stunts, and full views.</p>
+        </button>
+      </div>
+
+      <div class="briefing-footer">
+        <div class="controls-summary">
+          <span><b>Mouse / W A S D</b> Pitch &amp; Roll</span>
+          <span><b>Shift / Ctrl</b> Throttle &amp; Afterburner</span>
+          <span><b>V</b> Chase / Cockpit</span>
+          <span><b>G / F / B</b> Gear / Flaps / Airbrake</span>
+        </div>
+        <div class="launch-actions">
+          <button type="button" id="btn-launch-air" class="btn-primary">LAUNCH AIRBORNE</button>
+          <button type="button" id="btn-launch-runway" class="btn-secondary">RUNWAY 09 TAKEOFF</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="pause-overlay" class="overlay hidden">
+    <div class="panel compact-panel">
+      <div class="eyebrow">SORTIE PAUSED</div>
+      <h2 id="pause-mission-title">CALDERA RING TRIAL</h2>
+      <p class="subtitle">Press <b>P</b> or Resume to return to cockpit.</p>
+      <div class="action-row">
+        <button type="button" id="btn-resume" class="btn-primary">RESUME FLIGHT</button>
+        <button type="button" id="btn-restart-pause" class="btn-secondary">RESTART SORTIE</button>
+        <button type="button" id="btn-menu-pause" class="btn-ghost">MISSION SELECT</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="debrief-overlay" class="overlay hidden">
+    <div class="panel debrief-panel">
+      <div class="eyebrow" id="debrief-eyebrow">SORTIE COMPLETE</div>
+      <h2 id="debrief-title">RUNWAY 09 LANDING</h2>
+      <p class="subtitle" id="debrief-summary">Smooth flare onto centerline with gear locked.</p>
+      <div class="debrief-stats">
+        <div class="stat-box">
+          <span class="stat-label">GRADE</span>
+          <span class="stat-value grade-badge" id="stat-grade">S</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-label">OBJECTIVES</span>
+          <span class="stat-value" id="stat-objectives">10 / 10</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-label">TOUCHDOWN</span>
+          <span class="stat-value" id="stat-fpm">-142 FPM</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-label">FUEL / HULL</span>
+          <span class="stat-value" id="stat-systems">78% / 100%</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-label">SCORE</span>
+          <span class="stat-value" id="stat-score">4,850</span>
+        </div>
+      </div>
+      <div class="action-row">
+        <button type="button" id="btn-retry" class="btn-primary">FLY AGAIN</button>
+        <button type="button" id="btn-menu-debrief" class="btn-secondary">MISSION SELECT</button>
+      </div>
+    </div>
+  </div>
+
+  <p id="status" role="status" aria-live="polite"></p>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
