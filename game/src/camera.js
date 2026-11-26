@@ -68,13 +68,13 @@ export function createCameraRig(camera) {
       return;
     }
 
-    // Chase view: elevated behind aircraft so aircraft, lit wings, horizon, and target ahead align cleanly
-    const speedZoom = Math.min(2.6, state.speedMs * 0.018);
+    // Chase view: crisp hero framing of aircraft, lit wings, horizon, and target ahead
+    const speedZoom = Math.min(2.0, state.speedMs * 0.014);
     const desiredPos = state.position
       .clone()
-      .addScaledVector(fwd, -(14.5 + speedZoom))
-      .addScaledVector(up, 3.6)
-      .add(new THREE.Vector3(0, 1.45, 0));
+      .addScaledVector(fwd, -(12.6 + speedZoom))
+      .addScaledVector(up, 3.2)
+      .add(new THREE.Vector3(0, 1.3, 0));
 
     // Clamp above terrain/water so camera never clips underground
     const camGround = Math.max(0, getTerrainHeight(desiredPos.x, desiredPos.z));

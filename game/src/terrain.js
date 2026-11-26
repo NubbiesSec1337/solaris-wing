@@ -241,10 +241,14 @@ function buildTerrainMesh() {
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   geo.computeVertexNormals();
 
+  const detailTex = createTerrainDetailTexture();
   const mat = new THREE.MeshStandardMaterial({
     vertexColors: true,
-    roughness: 0.9,
-    metalness: 0.04,
+    map: detailTex,
+    bumpMap: detailTex,
+    bumpScale: 1.85,
+    roughness: 0.92,
+    metalness: 0.03,
     flatShading: false,
   });
 
@@ -252,6 +256,90 @@ function buildTerrainMesh() {
   mesh.receiveShadow = true;
   mesh.castShadow = true;
   return mesh;
+}
+
+function createTerrainDetailTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#dcdcdc';
+  ctx.fillRect(0, 0, 512, 512);
+
+  for (let y = 0; y < 512; y += 2) {
+    for (let x = 0; x < 512; x += 2) {
+      const n = hash2d(x * 0.37, y * 0.37);
+      const strata = Math.sin(y * 0.09 + n * 1.8) * 14;
+      const v = Math.max(185, Math.min(255, Math.round(224 + (n - 0.5) * 44 + strata)));
+      ctx.fillStyle = `rgb(${v},${v},${v})`;
+      ctx.fillRect(x, y, 2, 2);
+    }
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(36, 36);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function createOceanWaveTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#808080';
+  ctx.fillRect(0, 0, 256, 256);
+
+  for (let y = 0; y < 256; y += 2) {
+    for (let x = 0; x < 256; x += 2) {
+      const w1 = Math.sin((x / 256) * Math.PI * 8 + Math.cos((y / 256) * Math.PI * 4) * 1.4);
+      const w2 = Math.cos((y / 256) * Math.PI * 10 - (x / 256) * Math.PI * 4);
+      const v = Math.max(40, Math.min(240, Math.round(128 + (w1 + w2) * 34)));
+      ctx.fillStyle = `rgb(${v},${v},${v})`;
+      ctx.fillRect(x, y, 2, 2);
+    }
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(95, 95);
+  return tex;
+}
+
+function createCorrugatedTexture(baseHex, ribHex) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = baseHex;
+  ctx.fillRect(0, 0, 256, 256);
+  ctx.fillStyle = ribHex;
+  for (let x = 0; x < 256; x += 16) {
+    ctx.fillRect(x, 0, 5, 256);
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(6, 2);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function createWindsockTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  for (let i = 0; i < 5; i++) {
+    ctx.fillStyle = i % 2 === 0 ? '#ff5e1a' : '#f8fafc';
+    ctx.fillRect(i * 52, 0, 52, 64);
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
 }
 
 function buildAirfield() {
@@ -300,24 +388,26 @@ function buildAirfield() {
     group.add(rBulb);
   }
 
-  // PAPI 4-light precision approach path indicator (south/north side of RWY 09)
+  // PAPI 4-light precision approach path indicator (left side of RWY 09)
   const papiLights = [];
-  const housingMat = new THREE.MeshStandardMaterial({ color: 0x1a1e24, roughness: 0.7 });
+  const housingMat = new THREE.MeshStandardMaterial({ color: 0x161a20, roughness: 0.7 });
   for (let i = 0; i < 4; i++) {
-    const housing = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.4, 2.2), housingMat);
-    housing.position.set(RUNWAY.papiX, RUNWAY.elevation + 0.7, RUNWAY.papiZ - i * 3.6);
+    const housing = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.7, 2.6), housingMat);
+    housing.position.set(RUNWAY.papiX, RUNWAY.elevation + 0.85, RUNWAY.papiZ - i * 4.2);
     group.add(housing);
 
     const lampMat = new THREE.MeshBasicMaterial({ color: i < 2 ? 0xffffff : 0xff3040 });
-    const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.78, 10, 10), lampMat);
-    lamp.position.set(RUNWAY.papiX - 1.1, RUNWAY.elevation + 0.85, RUNWAY.papiZ - i * 3.6);
+    const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.95, 10, 10), lampMat);
+    lamp.position.set(RUNWAY.papiX - 1.3, RUNWAY.elevation + 0.95, RUNWAY.papiZ - i * 4.2);
     group.add(lamp);
     papiLights.push(lampMat);
   }
 
-  // Two hangars with extruded semi-circular barrel-vault roofs
-  const hangarMat = new THREE.MeshStandardMaterial({ color: 0x627082, roughness: 0.65, metalness: 0.35 });
-  const roofMat = new THREE.MeshStandardMaterial({ color: 0xd96b27, roughness: 0.5 });
+  // Two hangars with extruded semi-circular barrel-vault corrugated steel roofs
+  const wallTex = createCorrugatedTexture('#637285', '#4c5968');
+  const roofTex = createCorrugatedTexture('#d96826', '#b04e18');
+  const hangarMat = new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.65, metalness: 0.35 });
+  const roofMat = new THREE.MeshStandardMaterial({ map: roofTex, roughness: 0.52, metalness: 0.28 });
   const roofShape = new THREE.Shape();
   roofShape.absarc(0, 0, 15.2, 0, Math.PI, false);
   roofShape.closePath();
@@ -381,8 +471,8 @@ function buildAirfield() {
   const windsockPivot = new THREE.Group();
   windsockPivot.position.set(-415, RUNWAY.elevation + 8.8, 32);
   const sock = new THREE.Mesh(
-    new THREE.ConeGeometry(0.95, 5.2, 8, 1, true),
-    new THREE.MeshStandardMaterial({ color: 0xff6622, side: THREE.DoubleSide }),
+    new THREE.ConeGeometry(0.95, 5.2, 10, 1, true),
+    new THREE.MeshStandardMaterial({ map: createWindsockTexture(), side: THREE.DoubleSide }),
   );
   sock.rotation.z = -Math.PI / 2;
   sock.position.x = 2.6;
@@ -495,10 +585,12 @@ function buildCloudDeck() {
   const cloudGroup = new THREE.Group();
   const cloudMat = new THREE.MeshStandardMaterial({
     color: 0xffffff,
-    roughness: 1.0,
+    emissive: 0x453124,
+    emissiveIntensity: 0.52,
+    roughness: 0.95,
     metalness: 0.0,
     transparent: true,
-    opacity: 0.78,
+    opacity: 0.84,
   });
   const puffGeo = new THREE.IcosahedronGeometry(1, 1);
 
@@ -621,12 +713,15 @@ export function createWorld(scene) {
   scene.add(terrain);
   scene.add(buildFoliage());
 
+  const oceanWaveTex = createOceanWaveTexture();
   const oceanMat = new THREE.MeshStandardMaterial({
-    color: 0x0e4466,
-    roughness: 0.16,
-    metalness: 0.72,
+    color: 0x0f567d,
+    bumpMap: oceanWaveTex,
+    bumpScale: 0.55,
+    roughness: 0.14,
+    metalness: 0.68,
     transparent: true,
-    opacity: 0.94,
+    opacity: 0.95,
   });
   const ocean = new THREE.Mesh(new THREE.PlaneGeometry(11000, 11000, 1, 1), oceanMat);
   ocean.rotation.x = -Math.PI / 2;
@@ -677,7 +772,16 @@ export function createWorld(scene) {
     hemiLight.groundColor.setHex(preset.hemiGround);
     hemiLight.intensity = preset.hemiIntensity;
     oceanMat.color.setHex(preset.oceanDeep);
-    clouds.cloudMat.color.setHex(preset.id === 'storm' ? 0x9aa4b4 : 0xffffff);
+    if (preset.id === 'storm') {
+      clouds.cloudMat.color.setHex(0x8894a8);
+      clouds.cloudMat.emissive.setHex(0x1f2533);
+    } else if (preset.id === 'noon') {
+      clouds.cloudMat.color.setHex(0xffffff);
+      clouds.cloudMat.emissive.setHex(0x4a5b6e);
+    } else {
+      clouds.cloudMat.color.setHex(0xffe6cc);
+      clouds.cloudMat.emissive.setHex(0x523420);
+    }
   }
 
   function update(timeSec, dt, planeState, preset) {
@@ -691,8 +795,10 @@ export function createWorld(scene) {
     );
     sky.mesh.position.set(planeState.position.x, 0, planeState.position.z);
 
-    // Subtle ocean specular ripple & windsock + radar animation
-    oceanMat.roughness = 0.14 + Math.sin(timeSec * 1.4) * 0.03;
+    // Scroll ocean wave ripples & animate windsock + radar
+    oceanWaveTex.offset.x = (timeSec * 0.015) % 1;
+    oceanWaveTex.offset.y = (timeSec * 0.011) % 1;
+    oceanMat.roughness = 0.13 + Math.sin(timeSec * 1.4) * 0.025;
     airfield.radarPivot.rotation.y += dt * 1.45;
     const windRad = (preset.windHeadingDeg * Math.PI) / 180;
     airfield.windsockPivot.rotation.y = windRad + Math.sin(timeSec * 3.1) * 0.08;

@@ -107,33 +107,59 @@ export function createMissionManager(scene) {
         zoneGroup.position.set(z.x, gy + 0.5, z.z);
 
         const padRing = new THREE.Mesh(
-          new THREE.RingGeometry(22, 28, 32),
+          new THREE.RingGeometry(20, 27, 32),
           new THREE.MeshBasicMaterial({ color: 0xffaa33, side: THREE.DoubleSide }),
         );
         padRing.rotation.x = -Math.PI / 2;
         zoneGroup.add(padRing);
 
-        const pillarMat = new THREE.MeshBasicMaterial({
+        // Painted H helipad disc
+        const padBase = new THREE.Mesh(
+          new THREE.CircleGeometry(19, 28),
+          new THREE.MeshStandardMaterial({ color: 0x2a313b, roughness: 0.85 }),
+        );
+        padBase.rotation.x = -Math.PI / 2;
+        padBase.position.y = -0.1;
+        zoneGroup.add(padBase);
+
+        // Overhead glowing target ring + rising orange signal-smoke puffs
+        const markerMat = new THREE.MeshBasicMaterial({
           color: i === 0 ? 0x42f59b : 0xffaa33,
           transparent: true,
-          opacity: i === 0 ? 0.38 : 0.16,
-          side: THREE.DoubleSide,
+          opacity: i === 0 ? 0.82 : 0.3,
         });
-        const pillar = new THREE.Mesh(new THREE.CylinderGeometry(18, 18, 175, 16, 1, true), pillarMat);
-        pillar.position.y = 87;
-        zoneGroup.add(pillar);
+        const hoverRing = new THREE.Mesh(new THREE.TorusGeometry(28, 1.4, 8, 32), markerMat);
+        hoverRing.rotation.x = Math.PI / 2;
+        hoverRing.position.y = 48;
+        zoneGroup.add(hoverRing);
+
+        const smokePuffs = [];
+        const smokeMat = new THREE.MeshBasicMaterial({
+          color: 0xff7b29,
+          transparent: true,
+          opacity: i === 0 ? 0.48 : 0.15,
+          depthWrite: false,
+        });
+        for (let s = 0; s < 5; s++) {
+          const puff = new THREE.Mesh(new THREE.SphereGeometry(4.2, 8, 8), smokeMat);
+          puff.position.set((s - 2) * 1.4, 6 + s * 14, 0);
+          zoneGroup.add(puff);
+          smokePuffs.push(puff);
+        }
 
         group.add(zoneGroup);
         items.push({
           kind: 'drop',
           x: z.x,
-          y: gy + 45,
+          y: gy + 48,
           z: z.z,
           radius: z.radius,
           label: z.label,
           done: false,
           mesh: zoneGroup,
-          mat: pillarMat,
+          mat: markerMat,
+          smokeMat,
+          smokePuffs,
         });
       }
     } else if (currentMission.id === 'storm') {
@@ -184,7 +210,8 @@ export function createMissionManager(scene) {
           if (it.innerMat) it.innerMat.opacity = isNext ? 0.36 : 0.08;
         } else if (it.kind === 'drop') {
           it.mat.color.setHex(isNext ? 0x42f59b : 0xffaa33);
-          it.mat.opacity = isNext ? 0.42 : 0.14;
+          it.mat.opacity = isNext ? 0.85 : 0.25;
+          if (it.smokeMat) it.smokeMat.opacity = isNext ? 0.48 : 0.14;
         }
       }
     }
@@ -198,22 +225,29 @@ export function createMissionManager(scene) {
     if (currentMission.id !== 'supply' || allObjectivesDone) return { hit: false, msg: '' };
     const crateGroup = new THREE.Group();
     const box = new THREE.Mesh(
-      new THREE.BoxGeometry(2.6, 2.6, 2.6),
-      new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.6 }),
+      new THREE.BoxGeometry(3.4, 3.4, 3.4),
+      new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.55 }),
     );
     crateGroup.add(box);
     const chute = new THREE.Mesh(
-      new THREE.SphereGeometry(4.5, 10, 8, 0, Math.PI * 2, 0, Math.PI * 0.52),
-      new THREE.MeshStandardMaterial({ color: 0xf8fafc, side: THREE.DoubleSide }),
+      new THREE.SphereGeometry(7.2, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.54),
+      new THREE.MeshStandardMaterial({ color: 0xff6b2b, roughness: 0.7, side: THREE.DoubleSide }),
     );
-    chute.position.y = 5.2;
+    chute.position.y = 9.0;
     crateGroup.add(chute);
+    const chuteRing = new THREE.Mesh(
+      new THREE.TorusGeometry(6.8, 0.45, 6, 18),
+      new THREE.MeshBasicMaterial({ color: 0xf8fafc }),
+    );
+    chuteRing.rotation.x = Math.PI / 2;
+    chuteRing.position.y = 8.4;
+    crateGroup.add(chuteRing);
 
-    crateGroup.position.copy(state.position).add(new THREE.Vector3(0, -3.5, 0));
+    crateGroup.position.copy(state.position).add(new THREE.Vector3(0, -4.5, 0));
     group.add(crateGroup);
     crates.push({
       mesh: crateGroup,
-      vel: new THREE.Vector3(state.velocity.x * 0.35, -8.5, state.velocity.z * 0.35),
+      vel: new THREE.Vector3(state.velocity.x * 0.25, -6.5, state.velocity.z * 0.25),
       landed: false,
       age: 0,
     });
@@ -261,7 +295,7 @@ export function createMissionManager(scene) {
       }
     }
 
-    // Animate current gate/beacon
+    // Animate current gate/beacon/smoke
     for (let i = currentIndex; i < items.length; i++) {
       const it = items[i];
       if (it.kind === 'gate' || it.kind === 'storm') {
@@ -270,6 +304,13 @@ export function createMissionManager(scene) {
           it.core.rotation.y = timeSec * 1.8;
           it.core.rotation.x = timeSec * 1.1;
         }
+      } else if (it.kind === 'drop' && it.smokePuffs) {
+        it.smokePuffs.forEach((p, idx) => {
+          const cycle = (timeSec * 0.45 + idx * 0.2) % 1;
+          p.position.y = 5 + cycle * 65;
+          p.position.x = Math.sin(timeSec * 1.5 + idx) * 4 + cycle * 10;
+          p.scale.setScalar(0.8 + cycle * 1.3);
+        });
       }
     }
 

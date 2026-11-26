@@ -3,14 +3,115 @@
 
 import * as THREE from 'three';
 
-function createCockpitPanelTexture() {
+function createAirframePanelTexture() {
   const canvas = document.createElement('canvas');
   canvas.width = 512;
-  canvas.height = 192;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d');
+
+  // Brushed aircraft aluminum base
+  ctx.fillStyle = '#d7e0ea';
+  ctx.fillRect(0, 0, 512, 512);
+
+  // Panel seams
+  ctx.strokeStyle = 'rgba(38, 49, 64, 0.36)';
+  ctx.lineWidth = 2;
+  for (let y = 0; y < 512; y += 64) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(512, y);
+    ctx.stroke();
+  }
+  for (let x = 0; x < 512; x += 64) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, 512);
+    ctx.stroke();
+  }
+
+  // Subtle inspection panels & rivet dots
+  ctx.fillStyle = 'rgba(42, 54, 68, 0.45)';
+  for (let y = 8; y < 512; y += 64) {
+    for (let x = 8; x < 512; x += 32) {
+      ctx.fillRect(x, y, 2, 2);
+      ctx.fillRect(x, y + 48, 2, 2);
+    }
+  }
+  ctx.fillStyle = 'rgba(180, 194, 210, 0.45)';
+  ctx.fillRect(66, 130, 60, 60);
+  ctx.fillRect(258, 322, 60, 60);
+
+  // High-vis tactical squadron stripe
+  ctx.fillStyle = '#e66525';
+  ctx.fillRect(0, 236, 512, 28);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function createCockpitPanelTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1024;
+  canvas.height = 384;
   const ctx = canvas.getContext('2d');
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   return { canvas, ctx, texture };
+}
+
+function drawAnalogDial(ctx, cx, cy, radius, title, needleAngleRad, valueText, ticks = 10, color = '#58e1ff') {
+  // Recessed metallic bezel
+  ctx.fillStyle = '#090d14';
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius + 6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#3c4a5c';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  // Inner dial face
+  ctx.fillStyle = '#0d1520';
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Scale ticks
+  for (let i = 0; i <= ticks; i++) {
+    const a = -Math.PI * 1.25 + (i / ticks) * (Math.PI * 1.5);
+    const r0 = radius - (i % 2 === 0 ? 12 : 7);
+    const r1 = radius - 3;
+    ctx.strokeStyle = i >= ticks - 2 ? '#ff5b6e' : '#cfe4f8';
+    ctx.lineWidth = i % 2 === 0 ? 2 : 1.2;
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0);
+    ctx.lineTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1);
+    ctx.stroke();
+  }
+
+  // Title & digital readout
+  ctx.fillStyle = color;
+  ctx.font = 'bold 13px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText(title, cx, cy - radius * 0.36);
+  ctx.fillStyle = '#f8fafc';
+  ctx.font = 'bold 16px monospace';
+  ctx.fillText(valueText, cx, cy + radius * 0.48);
+
+  // Needle
+  ctx.strokeStyle = '#ff9f2e';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(cx - Math.cos(needleAngleRad) * 10, cy - Math.sin(needleAngleRad) * 10);
+  ctx.lineTo(cx + Math.cos(needleAngleRad) * (radius - 10), cy + Math.sin(needleAngleRad) * (radius - 10));
+  ctx.stroke();
+
+  ctx.fillStyle = '#cfd8e3';
+  ctx.beginPath();
+  ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 function drawCockpitInstruments(panel, state) {
@@ -18,103 +119,185 @@ function drawCockpitInstruments(panel, state) {
   const w = canvas.width;
   const h = canvas.height;
 
-  // Dark weathered bezel background
-  ctx.fillStyle = '#0d131b';
+  // Weathered brushed-gunmetal instrument panel background
+  ctx.fillStyle = '#151c26';
   ctx.fillRect(0, 0, w, h);
 
-  // Subtle panel screws & metallic trim
-  ctx.strokeStyle = '#2c3948';
-  ctx.lineWidth = 3;
-  ctx.strokeRect(4, 4, w - 8, h - 8);
+  // Panel seam lines & corner hex bolts
+  ctx.strokeStyle = '#2c3849';
+  ctx.lineWidth = 4;
+  ctx.strokeRect(6, 6, w - 12, h - 12);
+  ctx.fillStyle = '#526275';
+  for (const [bx, by] of [
+    [18, 18], [w - 18, 18], [18, h - 18], [w - 18, h - 18],
+    [336, 18], [688, 18], [336, h - 18], [688, h - 18],
+  ]) {
+    ctx.beginPath();
+    ctx.arc(bx, by, 5, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
-  // LEFT MFD: Artificial Horizon & Attitude Indicator
+  // LEFT BAY: Hybrid Analog Airspeed + Altimeter + Hardware Annunciators
+  const spdFrac = Math.min(1, Math.max(0, state.speedKnots / 320));
+  const spdAngle = -Math.PI * 1.25 + spdFrac * Math.PI * 1.5;
+  drawAnalogDial(ctx, 94, 108, 66, 'IAS KT', spdAngle, `${Math.round(state.speedKnots)}`, 10, '#58e1ff');
+
+  const altFrac = Math.min(1, Math.max(0, (state.altitudeFt % 1000) / 1000));
+  const altAngle = -Math.PI * 0.5 + altFrac * Math.PI * 2;
+  drawAnalogDial(ctx, 244, 108, 66, 'ALT FT', altAngle, `${Math.round(state.altitudeFt)}`, 10, '#42f59b');
+
+  // Kollsman baro & standby annunciator panel
+  ctx.fillStyle = '#0b1119';
+  ctx.fillRect(28, 200, 282, 152);
+  ctx.strokeStyle = '#334458';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(28, 200, 282, 152);
+
+  ctx.fillStyle = '#8da4bf';
+  ctx.font = 'bold 14px monospace';
+  ctx.textAlign = 'left';
+  ctx.fillText('BARO 29.92 INHG   TRIM NEUTRAL', 42, 224);
+  ctx.fillStyle = '#58e1ff';
+  ctx.fillText(`AOA ${state.aoaDeg.toFixed(1)}°   G-LOAD ${state.gForce.toFixed(1)}G`, 42, 248);
+
+  const lamps = [
+    { label: 'GEAR', on: state.gearDown, col: '#42f59b' },
+    { label: 'FLAP', on: state.flaps > 0, col: '#58e1ff' },
+    { label: 'BRK', on: state.airbrake, col: '#ffaa33' },
+    { label: 'AB', on: state.afterburner, col: '#ff6b35' },
+    { label: 'STAL', on: state.stallWarning, col: '#ff3b52' },
+  ];
+  lamps.forEach((lp, i) => {
+    const lx = 40 + i * 52;
+    const ly = 276;
+    ctx.fillStyle = lp.on ? lp.col : '#1c2635';
+    ctx.fillRect(lx, ly, 46, 54);
+    ctx.strokeStyle = '#3c4c63';
+    ctx.strokeRect(lx, ly, 46, 54);
+    ctx.fillStyle = lp.on ? '#081018' : '#647890';
+    ctx.font = 'bold 13px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(lp.label, lx + 23, ly + 32);
+  });
+
+  // CENTER BAY: Fighter Glass PFD Attitude Indicator with Softkeys
   ctx.save();
   ctx.beginPath();
-  ctx.rect(18, 16, 146, 160);
+  ctx.rect(356, 22, 312, 304);
   ctx.clip();
 
-  ctx.fillStyle = '#07141e';
-  ctx.fillRect(18, 16, 146, 160);
-
-  const cx = 91;
-  const cy = 96;
+  const cx = 512;
+  const cy = 174;
   ctx.save();
   ctx.translate(cx, cy);
   ctx.rotate(state.rollRad);
-  const pitchShift = Math.max(-44, Math.min(44, (state.pitchDeg / 45) * 44));
+  const pitchShift = Math.max(-88, Math.min(88, (state.pitchDeg / 45) * 88));
   ctx.translate(0, pitchShift);
 
-  ctx.fillStyle = '#1b5f9e';
-  ctx.fillRect(-120, -140, 240, 140);
-  ctx.fillStyle = '#6b4226';
-  ctx.fillRect(-120, 0, 240, 140);
+  const skyGrad = ctx.createLinearGradient(0, -240, 0, 0);
+  skyGrad.addColorStop(0, '#0f396b');
+  skyGrad.addColorStop(1, '#2679c2');
+  ctx.fillStyle = skyGrad;
+  ctx.fillRect(-260, -260, 520, 260);
+
+  const gndGrad = ctx.createLinearGradient(0, 0, 0, 260);
+  gndGrad.addColorStop(0, '#784824');
+  gndGrad.addColorStop(1, '#3d2210');
+  ctx.fillStyle = gndGrad;
+  ctx.fillRect(-260, 0, 520, 260);
+
   ctx.strokeStyle = '#8ef5b0';
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.moveTo(-90, 0);
-  ctx.lineTo(90, 0);
+  ctx.moveTo(-220, 0);
+  ctx.lineTo(220, 0);
   ctx.stroke();
 
-  // Pitch rungs inside ADI
-  ctx.strokeStyle = 'rgba(235, 250, 255, 0.75)';
-  ctx.lineWidth = 1.4;
+  ctx.strokeStyle = 'rgba(235, 250, 255, 0.85)';
+  ctx.lineWidth = 2;
   for (const deg of [-20, -10, 10, 20]) {
-    const py = (-deg / 45) * 44;
+    const py = (-deg / 45) * 88;
     ctx.beginPath();
-    ctx.moveTo(-22, py);
-    ctx.lineTo(22, py);
+    ctx.moveTo(-48, py);
+    ctx.lineTo(48, py);
     ctx.stroke();
   }
   ctx.restore();
 
-  // Fixed miniature aircraft reference symbol
+  // Fixed aircraft boresight chevron & roll scale arc
   ctx.strokeStyle = '#ffbe3d';
-  ctx.lineWidth = 2.5;
+  ctx.lineWidth = 4;
   ctx.beginPath();
-  ctx.moveTo(cx - 24, cy);
-  ctx.lineTo(cx - 7, cy);
-  ctx.lineTo(cx, cy + 5);
-  ctx.lineTo(cx + 7, cy);
-  ctx.lineTo(cx + 24, cy);
+  ctx.moveTo(cx - 46, cy);
+  ctx.lineTo(cx - 14, cy);
+  ctx.lineTo(cx, cy + 10);
+  ctx.lineTo(cx + 14, cy);
+  ctx.lineTo(cx + 46, cy);
   ctx.stroke();
+
+  ctx.fillStyle = 'rgba(6, 14, 22, 0.78)';
+  ctx.fillRect(364, 30, 88, 30);
+  ctx.fillRect(572, 30, 88, 30);
+  ctx.fillStyle = '#70ffbe';
+  ctx.font = 'bold 16px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText(`${Math.round(state.speedKnots)}KT`, 408, 50);
+  ctx.fillText(`${Math.round(state.altitudeFt)}FT`, 616, 50);
+
+  // Glass reflection sheen across PFD
+  const sheen = ctx.createLinearGradient(356, 22, 668, 326);
+  sheen.addColorStop(0, 'rgba(255,255,255,0.09)');
+  sheen.addColorStop(0.45, 'rgba(255,255,255,0.0)');
+  ctx.fillStyle = sheen;
+  ctx.fillRect(356, 22, 312, 304);
   ctx.restore();
 
   ctx.strokeStyle = '#38d8ff';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(18, 16, 146, 160);
-  ctx.fillStyle = '#7de7ff';
-  ctx.font = 'bold 11px monospace';
-  ctx.fillText('PFD ATTITUDE', 26, 30);
+  ctx.lineWidth = 3;
+  ctx.strokeRect(356, 22, 312, 304);
 
-  // CENTER MFD: Navigation / Radar + Heading & Target Bearing
+  // Bezel softkey labels under PFD
+  ['PFD', 'ILS', 'HSI', 'NAV'].forEach((lbl, idx) => {
+    const kx = 374 + idx * 72;
+    ctx.fillStyle = idx === 0 ? '#2b5266' : '#1b2430';
+    ctx.fillRect(kx, 336, 58, 28);
+    ctx.strokeStyle = '#47596e';
+    ctx.strokeRect(kx, 336, 58, 28);
+    ctx.fillStyle = idx === 0 ? '#7de7ff' : '#9cb1c9';
+    ctx.font = 'bold 14px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(lbl, kx + 29, 355);
+  });
+
+  // RIGHT BAY: Moving-Map Tactical Radar + N1/EGT Gauges & Fuel/Hull Bars
   ctx.fillStyle = '#061712';
-  ctx.fillRect(182, 16, 148, 160);
+  ctx.fillRect(694, 22, 304, 210);
   ctx.strokeStyle = '#3ef5a3';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(182, 16, 148, 160);
+  ctx.lineWidth = 3;
+  ctx.strokeRect(694, 22, 304, 210);
 
-  const rx = 256;
-  const ry = 104;
-  ctx.strokeStyle = 'rgba(62, 245, 163, 0.32)';
-  ctx.lineWidth = 1;
-  for (const r of [20, 40, 56]) {
+  const rx = 846;
+  const ry = 132;
+  ctx.strokeStyle = 'rgba(62, 245, 163, 0.35)';
+  ctx.lineWidth = 1.5;
+  for (const r of [28, 56, 84]) {
     ctx.beginPath();
     ctx.arc(rx, ry, r, 0, Math.PI * 2);
     ctx.stroke();
   }
   ctx.beginPath();
-  ctx.moveTo(rx - 56, ry);
-  ctx.lineTo(rx + 56, ry);
-  ctx.moveTo(rx, ry - 56);
-  ctx.lineTo(rx, ry + 56);
+  ctx.moveTo(rx - 84, ry);
+  ctx.lineTo(rx + 84, ry);
+  ctx.moveTo(rx, ry - 84);
+  ctx.lineTo(rx, ry + 84);
   ctx.stroke();
 
-  // Heading & target bug on ND
   ctx.fillStyle = '#8ef5c0';
-  ctx.font = 'bold 12px monospace';
-  ctx.fillText(`HDG ${String(Math.round(state.headingDeg)).padStart(3, '0')}`, 192, 32);
+  ctx.font = 'bold 16px monospace';
+  ctx.textAlign = 'left';
+  ctx.fillText(`HDG ${String(Math.round(state.headingDeg)).padStart(3, '0')}°`, 708, 46);
   ctx.fillStyle = '#ffbe3d';
-  ctx.fillText(`SPD ${Math.round(state.speedKnots)}KT`, 262, 32);
+  ctx.fillText(state.nextTarget ? state.nextTarget.label.slice(0, 12) : 'FREE', 858, 46);
 
   if (state.nextTarget) {
     const dx = state.nextTarget.x - state.position.x;
@@ -126,65 +309,47 @@ function drawCockpitInstruments(panel, state) {
     const rightZ = Math.sin(hdgRad);
     const localFwd = dx * fwdX + dz * fwdZ;
     const localRight = dx * rightX + dz * rightZ;
-    const scale = 52 / 1400;
-    const px = Math.max(-52, Math.min(52, localRight * scale));
-    const py = Math.max(-52, Math.min(52, -localFwd * scale));
+    const scale = 78 / 1400;
+    const px = Math.max(-78, Math.min(78, localRight * scale));
+    const py = Math.max(-78, Math.min(78, -localFwd * scale));
+    ctx.strokeStyle = 'rgba(255, 170, 51, 0.55)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(rx, ry);
+    ctx.lineTo(rx + px, ry + py);
+    ctx.stroke();
     ctx.fillStyle = '#ffaa22';
     ctx.beginPath();
-    ctx.arc(rx + px, ry + py, 5, 0, Math.PI * 2);
+    ctx.arc(rx + px, ry + py, 7, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  // Aircraft center triangle
   ctx.fillStyle = '#ffffff';
   ctx.beginPath();
-  ctx.moveTo(rx, ry - 6);
-  ctx.lineTo(rx - 5, ry + 5);
-  ctx.lineTo(rx + 5, ry + 5);
+  ctx.moveTo(rx, ry - 8);
+  ctx.lineTo(rx - 6, ry + 7);
+  ctx.lineTo(rx + 6, ry + 7);
   ctx.closePath();
   ctx.fill();
 
-  // RIGHT MFD: Engine / Fuel / Altitude / Systems
-  ctx.fillStyle = '#0c131f';
-  ctx.fillRect(348, 16, 146, 160);
-  ctx.strokeStyle = '#ffaa33';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(348, 16, 146, 160);
-
-  ctx.fillStyle = '#ffbe4f';
-  ctx.font = 'bold 11px monospace';
-  ctx.fillText('EICAS / SYS', 356, 30);
+  // Engine RPM + Fuel/Hull status bars at bottom right
+  const rpmAngle = -Math.PI * 1.25 + state.throttle * Math.PI * 1.5;
+  drawAnalogDial(ctx, 744, 304, 46, 'N1%', rpmAngle, `${Math.round(state.throttle * 100)}`, 8, '#ffbe4f');
 
   const bars = [
-    { label: 'THR', val: state.throttle, color: state.afterburner ? '#ff6b35' : '#43f59b' },
     { label: 'FUEL', val: state.fuel / 100, color: state.fuel < 22 ? '#ff445a' : '#4ad2ff' },
     { label: 'HULL', val: state.hull / 100, color: state.hull < 40 ? '#ff445a' : '#80f58c' },
   ];
   bars.forEach((b, idx) => {
-    const bx = 358 + idx * 44;
-    ctx.fillStyle = '#1b2638';
-    ctx.fillRect(bx, 42, 28, 76);
-    const fillH = Math.max(2, Math.min(76, b.val * 76));
-    ctx.fillStyle = b.color;
-    ctx.fillRect(bx, 42 + (76 - fillH), 28, fillH);
+    const by = 256 + idx * 52;
     ctx.fillStyle = '#dbe9ff';
-    ctx.font = 'bold 10px monospace';
-    ctx.fillText(b.label, bx + 1, 132);
-  });
-
-  // Gear / Flaps / Brake status lights at bottom right
-  const badges = [
-    { label: 'GEAR', on: state.gearDown, col: '#42f59b' },
-    { label: 'FLAP', on: state.flaps > 0, col: '#58e1ff' },
-    { label: 'BRK', on: state.airbrake, col: '#ffaa33' },
-  ];
-  badges.forEach((bg, idx) => {
-    const x = 356 + idx * 44;
-    ctx.fillStyle = bg.on ? bg.col : '#253142';
-    ctx.fillRect(x, 144, 38, 22);
-    ctx.fillStyle = bg.on ? '#081018' : '#71849c';
-    ctx.font = 'bold 10px monospace';
-    ctx.fillText(bg.label, x + 5, 159);
+    ctx.font = 'bold 14px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText(`${b.label} ${Math.round(b.val * 100)}%`, 818, by + 14);
+    ctx.fillStyle = '#1b2638';
+    ctx.fillRect(818, by + 20, 174, 18);
+    ctx.fillStyle = b.color;
+    ctx.fillRect(818, by + 20, Math.max(4, b.val * 174), 18);
   });
 
   texture.needsUpdate = true;
@@ -197,7 +362,8 @@ export function createAircraft() {
   root.add(exteriorGroup);
   root.add(cockpitGroup);
 
-  const hullMat = new THREE.MeshStandardMaterial({ color: 0xd9e1ea, roughness: 0.34, metalness: 0.55 });
+  const skinTex = createAirframePanelTexture();
+  const hullMat = new THREE.MeshStandardMaterial({ map: skinTex, color: 0xe6edf5, roughness: 0.36, metalness: 0.52 });
   const darkMetalMat = new THREE.MeshStandardMaterial({ color: 0x262e3a, roughness: 0.45, metalness: 0.75 });
   const accentMat = new THREE.MeshStandardMaterial({ color: 0xe66525, roughness: 0.38, metalness: 0.35 });
   const glassMat = new THREE.MeshPhysicalMaterial({
@@ -213,6 +379,14 @@ export function createAircraft() {
   fuselage.rotation.x = Math.PI / 2;
   fuselage.castShadow = true;
   exteriorGroup.add(fuselage);
+
+  // Pilot helmet & headrest visible inside tinted canopy
+  const helmet = new THREE.Mesh(
+    new THREE.SphereGeometry(0.24, 12, 10),
+    new THREE.MeshStandardMaterial({ color: 0xf4f7fb, roughness: 0.3 }),
+  );
+  helmet.position.set(0, 0.74, -2.05);
+  exteriorGroup.add(helmet);
 
   // Nose radome
   const nose = new THREE.Mesh(new THREE.ConeGeometry(0.62, 2.7, 14), darkMetalMat);
